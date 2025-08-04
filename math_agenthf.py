@@ -1,24 +1,35 @@
-from langchain.llms import HuggingFaceHub
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+import os
 import chainlit as cl
+from dotenv import load_dotenv
+from cohere import ClientV2
 
-HUGGINGFACEHUB_API_TOKEN = "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"
+load_dotenv()
 
-llm = HuggingFaceHub(
-    repo_id="google/flan-t5-large",
-    model_kwargs={"temperature": 0.5, "max_length": 256},
-    huggingfacehub_api_token=HUGGINGFACEHUB_API_TOKEN,
-)
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+client = ClientV2(api_key=COHERE_API_KEY)
 
-math_assistant_prompt = PromptTemplate(
-    input_variables=["question"],
-    template="Solve this math problem step by step: {question}",
-)
-
-word_problem_chain = LLMChain(llm=llm, prompt=math_assistant_prompt)
 
 @cl.on_message
 async def process_user_query(message: cl.Message):
-    response = await word_problem_chain.ainvoke({"question": message.content})
-    await cl.Message(content=response).send()
+    user_question = message.content.strip()
+
+    # Build the system + user messages for math solving
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful math assistant. Solve the following problem step-by-step."
+        },
+        {
+            "role": "user",
+            "content": user_question
+        }
+    ]
+
+    response_text = ""
+    for chunk in client.chat_stream(
+            model="command-a-03-2025",
+            messages=messages,
+            temperature=0.3
+    ):
+        if hasattr(chunk, "message") and hasattr(chunk.message, "content"):
+            response_text += chunk.message.content
